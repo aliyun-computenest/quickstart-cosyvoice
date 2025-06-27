@@ -91,3 +91,89 @@ CosyVoice是阿里云推出的一款语音合成服务，它能够将文本转�
 <br>
 <br>
 ![9.png](9.png)如果您使用的是自然语音控制，您可以在instruct填写控制文本，用于控制语气语速等。
+7. 如果您想通过api访问服务，您可以使用下面的python代码通过sdk访问。请注意，需要将访问的ip更换为您服务器的公网ip，端口为80端口。另外需将your_valid_token更新为服务实例详情页，立即使用中的ApiKey
+``` 
+import argparse
+import logging
+import requests
+import torch
+import torchaudio
+import numpy as np
+
+
+def main():
+    url = "http://{}:{}/inference_{}".format(args.host, args.port, args.mode)
+    headers = {
+        "X-API-TOKEN": "your_valid_token"  # 添加自定义 Header
+    }
+    if args.mode == 'sft':
+        payload = {
+            'tts_text': args.tts_text,
+            'spk_id': args.spk_id
+        }
+        response = requests.request("GET", url, data=payload, stream=True, headers=headers)
+    elif args.mode == 'zero_shot':
+        payload = {
+            'tts_text': args.tts_text,
+            'prompt_text': args.prompt_text
+        }
+        files = [('prompt_wav', ('prompt_wav', open(args.prompt_wav, 'rb'), 'application/octet-stream'))]
+        response = requests.request("GET", url, data=payload, files=files, stream=True, headers=headers)
+    elif args.mode == 'cross_lingual':
+        payload = {
+            'tts_text': args.tts_text,
+        }
+        files = [('prompt_wav', ('prompt_wav', open(args.prompt_wav, 'rb'), 'application/octet-stream'))]
+        response = requests.request("GET", url, data=payload, files=files, stream=True, headers=headers)
+    else:
+        payload = {
+            'tts_text': args.tts_text,
+            'spk_id': args.spk_id,
+            'instruct_text': args.instruct_text
+        }
+        response = requests.request("GET", url, data=payload, stream=True, headers=headers)
+    tts_audio = b''
+    for r in response.iter_content(chunk_size=16000):
+        tts_audio += r
+    tts_speech = torch.from_numpy(np.array(np.frombuffer(tts_audio, dtype=np.int16))).unsqueeze(dim=0)
+    logging.info('save response to {}'.format(args.tts_wav))
+    torchaudio.save(args.tts_wav, tts_speech, target_sr)
+    logging.info('get response')
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host',
+                        type=str,
+                        default='116.62.86.145')
+    parser.add_argument('--port',
+                        type=int,
+                        default='80')
+    parser.add_argument('--mode',
+                        default='sft',
+                        choices=['sft', 'zero_shot', 'cross_lingual', 'instruct'],
+                        help='request mode')
+    parser.add_argument('--tts_text',
+                        type=str,
+                        default='你好，我是通义千问语音合成大模型，请问有什么可以帮您的吗？')
+    parser.add_argument('--spk_id',
+                        type=str,
+                        default='中文女')
+    parser.add_argument('--prompt_text',
+                        type=str,
+                        default='希望你以后能够做的比我还好呦。')
+    parser.add_argument('--prompt_wav',
+                        type=str,
+                        default='../../../asset/zero_shot_prompt.wav')
+    parser.add_argument('--instruct_text',
+                        type=str,
+                        default='Theo \'Crimson\', is a fiery, passionate rebel leader. \
+                                 Fights with fervor for justice, but struggles with impulsiveness.')
+    parser.add_argument('--tts_wav',
+                        type=str,
+                        default='demo.wav')
+    args = parser.parse_args()
+    prompt_sr, target_sr = 16000, 22050
+    main()
+
+```
